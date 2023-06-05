@@ -1,0 +1,3 @@
+# Ignore circuit python files
+!code.py
+!animation.py
