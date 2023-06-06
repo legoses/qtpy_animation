@@ -9,41 +9,42 @@ class DisplayPattern:
         self.__gridAddr: int = [0x00, 0x02, 0x04, 0x06]
         self.__i2c = i2c
         self.__trail = trail
+        self.__writeBuffer = []
 
 
+    #Make sure there are no basic errors the the list the user passes
     def __checkArr(self):
         for i in range(len(self.__dispArr)):
-            if len(self.__dispArr[i]) != 2:
+            if len(self.__dispArr[i]) != 3:
                 raise ValueError(f'Line {i+1} is missing a value')
             else:
-                if (self.__dispArr[i][0] > 7) or (self.__dispArr[i][0] < 0):
+                if (self.__dispArr[i][0] > 8) or (self.__dispArr[i][0] < 0):
                     raise ValueError(f"Segment value in row {i+1} is incorrect. Must be between 0 and 7.")
                 if (self.__dispArr[i][1] > 4) or (self.__dispArr[i][1] < 0):
                     raise ValueError(f'Grid number in row {i+1} is in correct. Must be between 0 and 4')
 
 
-    def __displayTwoSeg(self, curPos) -> int:
+    #setup the bytes to be displayed
+    def __displaySeg(self, curPos, loops, bit) -> int:
         byteArr = ["0", "0", "0", "0", "0", "0", "0", "0"]
 
-        if curPos == 0:
-            byteArr[self.__dispArr[curPos][0]] = "1"
-        else:
-            byteArr[self.__dispArr[curPos][0]] = "1"
-            byteArr[self.__dispArr[curPos-1][0]] = "1"
-
+        for i in range(loops):
+            if curPos - i >= 0:
+                byteNum = self.__dispArr[curPos-i][bit]
+                if byteNum != 0:
+                    byteArr[byteNum-1] = "1"
+            
         byteArrStr = "".join(byteArr)
         byteStr = "0b" + byteArrStr
         return int(byteStr)
 
-    
-    def __dispOneSeg(self, curPos) -> int:
-        byteArr = ["0", "0", "0", "0", "0", "0", "0", "0"]
-        byteArr[self.__dispArr[curPos][0]] = "1"
 
-        byteArrStr = "".join(byteArr)
-        byteStr = "0b" + byteArrStr
-        return int(byteStr)
+    def __listToByte(self, theList) -> int:
+        listStr = "".join(theList)
+        listStrByte = "0b" + listStr
+        listByte = int(listStrByte)
 
+        return listByte
 
 
     def clearPrevGrid(self, prevGrid) -> void:
@@ -66,6 +67,7 @@ class DisplayPattern:
     def segmentTrail(self):
         return self.__trail
 
+
     @segmentTrail.setter
     def segmentTrail(self, setTrail):
         if (setTrail > 0) and (setTrail < 8):
@@ -74,52 +76,116 @@ class DisplayPattern:
             raise ValueError("Trail must be greater than 0 and less than 8")
 
 
+    def __writeToDisplay(self):
+        for i in range(len(self.__writeBuffer)):
+            self.__i2c.writeto(self.__address, self.__writeBuffer[i])
+
+    #Created because I keep forgetting that the grid number needs to be grabbed from the gridAddr list, and not the dispArr list
+    def __getGridNum(self, iVal):
+        return self.__gridAddr[iVal-1]
+
+
+    def __insertInList(self, theList, theByte) -> void:
+        newByte = theByte - 1
+        if theByte != 0:
+            theList[newByte] = "1"
 
 
     def start(self, loop):
         self.__checkArr()
-        writeBuffer = []
         
         self.__i2c.try_lock()
-        #self.clearDisplay()
 
-        #it seems like python is coverting binary bits to text. 01000000 is being converted to @ and causing issues when trying to write to the display
+        #Keep track of whether or not previous grid should be cleared
+        clearGrid = 0
+        prevGrid = 0
+
         while True:
+            prevByteArray = 0
+
             for i in range(len(self.__dispArr)):
                 #Get the grid the user selected
                 #User will choose a number between 1 and 4. Subtract 1 to get the array index
-                gridNum = self.__gridAddr[self.__dispArr[i][1] - 1]
-                prevGridNum = self.__gridAddr[self.__dispArr[i-1][1] - 1]
+                gridNum = self.__gridAddr[self.__dispArr[i][2] - 1]
 
                 #Get the byte to switch on segment
-                if gridNum == prevGridNum:
-                    byte = self.__displayTwoSeg(i)
-                    byteArray = bytearray((gridNum, byte, 0b00000000))
-                    self.__i2c.writeto(self.__address, byteArray)
+                if (gridNum == prevGrid) or (i == 0):
+                    loops = 0
+
+                    if i >= self.__trail:
+                        loops = self.__trail
+                    else:
+                        loops = i + 1
+
+                    #Get the bytes to be displayed
+                    byte1 = self.__displaySeg(i, loops, 0)
+                    byte2 = self.__displaySeg(i, loops, 1)
+
+                    byteArray = bytearray((gridNum, byte1, byte2))
+                    self.__writeBuffer.insert(0, byteArray)
+
+                    if clearGrid == 1:
+                        clrOldGrid = self.__getGridNum(self.__dispArr[i][2]-1)
+                        byteArray = bytearray((prevGrid, 0b00000000, 0b00000000))
+                        self.__writeBuffer.insert(0, byteArray)
+                        clearGrid = 0
+
+                    #Write from the buffer to the display
+                    self.__writeToDisplay()
+                    prevByteArray = byteArray
+
                 else:
+                    allBytes = [
+                        ["0", "0", "0", "0", "0", "0", "0", "0"], #Current grid byte 1
+                        ["0", "0", "0", "0", "0", "0", "0", "0"], #Current grid byte 2
+                        ["0", "0", "0", "0", "0", "0", "0", "0"], #Previous grid byte 1
+                        ["0", "0", "0", "0", "0", "0", "0", "0"], #Previous grid byte 2
+                    ]
+
+                    #Index of furthest back segment being displayed
+                    curRange = i - (self.__trail - 1)
+
+                    #Number of the previous and current grids
+                    gridNum = self.__getGridNum(self.__dispArr[i][2])
+                    prevGrid = self.__getGridNum(self.__dispArr[i-self.__trail][2])
+
                     for j in range(self.__trail):
-                        currentGrid = self.__dispOneSeg(i)
-                        oldGrid = self.__dispOneSeg(i-1)
+                        #Byte numbers
+                        currentPosition1 = self.__dispArr[curRange+j][0]
+                        currentPosition2 = self.__dispArr[curRange+j][1]
 
-                        print(currentGrid)
+                        curGridNum = self.__getGridNum(self.__dispArr[curRange+j][2])
 
-                        currentByte = bytearray((gridNum, currentGrid, 0b00000000))
-                        oldByte = bytearray((prevGridNum, oldGrid, 0b00000000))
+                        if curGridNum == gridNum:
+                            self.__insertInList(allBytes[0], currentPosition1)
+                            self.__insertInList(allBytes[1], currentPosition2)
+                        else:
+                            self.__insertInList(allBytes[2], currentPosition1)
+                            self.__insertInList(allBytes[3], currentPosition2)
+                            
+                        #Convert from a list to a byte
+                        newGridByte1 = self.__listToByte(allBytes[0])
+                        newGridByte2 = self.__listToByte(allBytes[1])
+                        oldGridByte1 = self.__listToByte(allBytes[2])
+                        oldGridByte2 = self.__listToByte(allBytes[3])
 
-                        self.__i2c.writeto(self.__address, currentByte)
-                        self.__i2c.writeto(self.__address, oldByte)
+                        #Create byteararys
+                        newGridArray = bytearray((gridNum, newGridByte1, newGridByte2))
+                        prevGridArray = bytearray((prevGrid, oldGridByte1, oldGridByte2))
 
-                        i += 1
+                        #Insert into buffer before writing to display
+                        self.__writeBuffer.insert(0, newGridArray)
+                        self.__writeBuffer.insert(0, prevGridArray)
 
+                        #Display the buffer contents, then clear the display
+                        self.__writeToDisplay()
+                        self.__writeBuffer.clear()
+                        clearGrid = 1
+                        i += 1    
 
-
-
-                
-
-                
-
-                #time.sleep(self.__speed)
-                time.sleep(1)
+                self.__writeBuffer.clear()
+                time.sleep(self.__speed)
+                #time.sleep(.5)
 
             if loop == False:
                 self.__i2c.unlock()
