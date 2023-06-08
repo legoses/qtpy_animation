@@ -58,10 +58,11 @@ display = Seg14x4(i2c, address=(address))
 display.brightness = 0.2
 
 #test = animation.DisplayPattern(stepsTrail, address, i2c)
-#test.speed = .5
+
 #test.start(True)
 
 
 test = animation.DisplayPattern(stepsTrail, address, i2c)
-test.segmentTrail = 4
-test.start(True)
+test.speed = .2
+test.segmentTrail = 2
+test.start(False)

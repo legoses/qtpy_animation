@@ -61,6 +61,8 @@ class DisplayPattern:
     def speed(self, value):
         if value <= 0:
             raise ValueError("Speed must be greater than 0")
+        else:
+            self.__speed = value
 
 
     @property
