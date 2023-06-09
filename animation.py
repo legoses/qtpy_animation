@@ -158,12 +158,16 @@ class DisplayPattern:
 
                         curGridNum = self.__getGridNum(self.__dispArr[curRange+j][2])
 
+                        #Pass the list and the index to be affected.
+                        #The first digit in the second byte does not control anything.
+                        #Here, 1 is being subtracted so the numbering is more consistent for the end user
+                        #e.g. 0 will not light up a segment, but 1 will light up the first
                         if curGridNum == gridNum:
                             self.__insertInList(allBytes[0], currentPosition1)
-                            self.__insertInList(allBytes[1], currentPosition2)
+                            self.__insertInList(allBytes[1], currentPosition2-1)
                         else:
-                            self.__insertInList(allBytes[2], currentPosition1)
-                            self.__insertInList(allBytes[3], currentPosition2)
+                            self.__insertInList(allBytes[2], currentPosition1, 0)
+                            self.__insertInList(allBytes[3], currentPosition2-1)
                             
                         #Convert from a list to a byte
                         newGridByte1 = self.__listToByte(allBytes[0])
