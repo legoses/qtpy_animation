@@ -12,38 +12,14 @@ import time
 
 
 stepsTrail = [
-    [9, 1],
-    [3, 1],
+    [1, 1],
     [2, 1],
-    [7, 1],
-    [10, 1],
-    [11, 1],
-    [12, 1],
-    [13, 1],
     [14, 1],
     [15, 1],
-    [9, 2],
-    [10, 2],
-    [11, 2],
-    [12, 2],
-    [13, 2],
-    [14, 2],
-    [15, 2],
-    [9, 3],
-    [10, 3],
-    [11, 3],
-    [12, 3],
-    [13, 3],
-    [14, 3],
-    [15, 3],
-    [9, 4],
-    [10, 4],
-    [11, 4],
-    [12, 4],
-    [13, 4],
-    [14, 4],
-    [15, 4],
-]
+    [1, 4],
+    [2, 4],
+    [3, 2],
+    ]
 
 #Initiate the i2c connection
 i2c = board.STEMMA_I2C()
@@ -58,7 +34,7 @@ test = animation.DisplayPattern(stepsTrail, address, i2c)
 
 #Control the speed the animation plays at
 #The number represents the delay in seconds between each step
-test.speed = .2
+test.speed = 1
 
 #How many segments are displayed at once
 test.segmentTrail = 2
