@@ -10,6 +10,7 @@ class DisplayPattern:
         self.__i2c = i2c
         self.__trail = trail
         self.__writeBuffer = []
+        self.__clearGrids = []
 
 
     #Make sure there are no basic errors the the list the user passes
@@ -24,13 +25,19 @@ class DisplayPattern:
                     raise ValueError(f'Grid number in row {i+1} is in correct. Must be between 0 and 4')
 
 
-    def __displaySeg(self, pos):
-        byteArr = ["0", "0", "0", "0", "0", "0", "0", "0"]
-
-        byteArr[pos-1] = "1"
-        byteArrStr = "".join(byteArr)
-        byteStr = "0b" + byteArrStr
-        return int(byteStr)
+    def __displaySeg(self, curPos, loops, byteArr):
+        for i in range(loops):
+            if curPos - i >= 0:
+                if self.__dispArr[curPos-i][0] > 8:
+                    num = self.__dispArr[curPos-i][0] - 8
+                    byteArr[1][num] = "1"
+                elif self.__dispArr[curPos-i][0] > 0:
+                    print(self.__dispArr[curPos-i][0])
+                    byteArr[0][self.__dispArr[curPos-i][0]-1] = "1"
+            
+        #byteArrStr = "".join(byteArr)
+        #byteStr = "0b" + byteArrStr
+        #return int(byteStr)
 
 
     def __listToByte(self, theList) -> int:
@@ -41,9 +48,14 @@ class DisplayPattern:
         return listByte
 
 
-    def clearPrevGrid(self, prevGrid) -> void:
-        prevGridIndex = self.__gridAddr[prevGrid-1]
-        self.__i2c.writeto(self.__address, bytearray((prevGridIndex, 0b00000000, 0b00000000)))
+    def __clearPrevGrid(self) -> void:
+        #prevGridIndex = self.__gridAddr[prevGrid-1]
+        print(self.__clearGrids)
+
+        for i in self.__clearGrids:
+            self.__i2c.writeto(self.__address, bytearray((self.__gridAddr[i-1], 0b00000000, 0b00000000)))
+
+        self.__clearGrids.clear()
 
 
     @property
@@ -103,8 +115,10 @@ class DisplayPattern:
                 #Get the grid the user selected
                 #User will choose a number between 1 and 4. Subtract 1 to get the array index
                 gridNum = self.__gridAddr[self.__dispArr[i][1] - 1]
-                byte1 = 0b00000000
-                byte2 = 0b00000000
+                allBytes = [
+                    ["0", "0", "0", "0", "0", "0", "0", "0"],
+                    ["0", "0", "0", "0", "0", "0", "0", "0"]
+                ]
 
                 #Get the byte to switch on segment
                 if (gridNum == prevGrid) or (i == 0):
@@ -115,23 +129,30 @@ class DisplayPattern:
                     else:
                         loops = i + 1
 
+
+                    self.__displaySeg(i, loops, allBytes)
+
+                    byte1 = self.__listToByte(allBytes[0])
+                    byte2 = self.__listToByte(allBytes[1])
+
                     #Get the bytes to be displayed
-                    if self.__dispArr[i][0] > 8:
+                    #if self.__dispArr[i][0] > 8:
                         #Convert given number to be used in the second display
                         #Normally the first int of the second byte doesn't do anything, so to avoid 9 being a dead number
                         #I only subtract 7, so the transition between first and second byte is smooth without any dead inbetween
-                        num = (self.__dispArr[i][0] - 7)
-                        byte2 = self.__displaySeg(num)
-                    else:
-                        byte1 = self.__displaySeg(self.__dispArr[i][0])
+                        #seg = self.__dispArr[i][0] - 7
+                        #byte2 = self.__displaySeg(i, seg, loops)
+                    #else:
+                        #byte1 = self.__displaySeg(i, self.__dispArr[i][0], loops)
 
                     byteArray = bytearray((gridNum, byte1, byte2))
                     self.__writeBuffer.insert(0, byteArray)
 
                     if clearGrid == 1:
-                        clrOldGrid = self.__getGridNum(self.__dispArr[i][1]-1)
-                        byteArray = bytearray((prevGrid, 0b00000000, 0b00000000))
-                        self.__writeBuffer.insert(0, byteArray)
+                        #clrOldGrid = self.__getGridNum(self.__dispArr[i][1]-1)
+                        #byteArray = bytearray((prevGrid, 0b00000000, 0b00000000))
+                        #self.__writeBuffer.insert(0, byteArray)
+                        self.__clearPrevGrid()
                         clearGrid = 0
 
                     #Write from the buffer to the display
@@ -161,17 +182,18 @@ class DisplayPattern:
 
                         #Pass the list and the index to be affected.
                         #The first digit in the second byte does not control anything.
-                        #Here, 1 is being subtracted so the numbering is more consistent for the end user
-                        #e.g. 0 will not light up a segment, but 1 will light up the first
+                        #e.g. 0 will not light up a segment
                         if curGridNum == gridNum:
                             if currentPosition > 8:
-                                num = currentPosition - 8
+                                num = currentPosition - 7
                                 self.__insertInList(allBytes[1], num)
                             else:
                                 self.__insertInList(allBytes[0], currentPosition)
                         else:
+                            self.__clearGrids.append(self.__dispArr[curRange+j][1])
+
                             if currentPosition > 8:
-                                num = currentPosition - 8
+                                num = currentPosition - 7
                                 self.__insertInList(allBytes[3], num)
                             else:
                                 self.__insertInList(allBytes[2], currentPosition)
@@ -182,7 +204,7 @@ class DisplayPattern:
                         oldGridByte1 = self.__listToByte(allBytes[2])
                         oldGridByte2 = self.__listToByte(allBytes[3])
 
-                        #Create byteararys
+                        #Create bytearrays
                         newGridArray = bytearray((gridNum, newGridByte1, newGridByte2))
                         prevGridArray = bytearray((prevGrid, oldGridByte1, oldGridByte2))
 
