@@ -15,25 +15,19 @@ class DisplayPattern:
     #Make sure there are no basic errors the the list the user passes
     def __checkArr(self):
         for i in range(len(self.__dispArr)):
-            if len(self.__dispArr[i]) != 3:
+            if len(self.__dispArr[i]) != 2:
                 raise ValueError(f'Line {i+1} is missing a value')
             else:
-                if (self.__dispArr[i][0] > 8) or (self.__dispArr[i][0] < 0):
-                    raise ValueError(f"Segment value in row {i+1} is incorrect. Must be between 0 and 7.")
+                if (self.__dispArr[i][0] > 15) or (self.__dispArr[i][0] < 0):
+                    raise ValueError(f"Segment value in row {i+1} is incorrect. Must be between 0 and 15.")
                 if (self.__dispArr[i][1] > 4) or (self.__dispArr[i][1] < 0):
                     raise ValueError(f'Grid number in row {i+1} is in correct. Must be between 0 and 4')
 
 
-    #setup the bytes to be displayed
-    def __displaySeg(self, curPos, loops, bit) -> int:
+    def __displaySeg(self, pos):
         byteArr = ["0", "0", "0", "0", "0", "0", "0", "0"]
 
-        for i in range(loops):
-            if curPos - i >= 0:
-                byteNum = self.__dispArr[curPos-i][bit]
-                if byteNum != 0:
-                    byteArr[byteNum-1] = "1"
-            
+        byteArr[pos-1] = "1"
         byteArrStr = "".join(byteArr)
         byteStr = "0b" + byteArrStr
         return int(byteStr)
@@ -108,7 +102,9 @@ class DisplayPattern:
             for i in range(len(self.__dispArr)):
                 #Get the grid the user selected
                 #User will choose a number between 1 and 4. Subtract 1 to get the array index
-                gridNum = self.__gridAddr[self.__dispArr[i][2] - 1]
+                gridNum = self.__gridAddr[self.__dispArr[i][1] - 1]
+                byte1 = 0b00000000
+                byte2 = 0b00000000
 
                 #Get the byte to switch on segment
                 if (gridNum == prevGrid) or (i == 0):
@@ -120,14 +116,20 @@ class DisplayPattern:
                         loops = i + 1
 
                     #Get the bytes to be displayed
-                    byte1 = self.__displaySeg(i, loops, 0)
-                    byte2 = self.__displaySeg(i, loops, 1)
+                    if self.__dispArr[i][0] > 8:
+                        #Convert given number to be used in the second display
+                        #Normally the first int of the second byte doesn't do anything, so to avoid 9 being a dead number
+                        #I only subtract 7, so the transition between first and second byte is smooth without any dead inbetween
+                        num = (self.__dispArr[i][0] - 7)
+                        byte2 = self.__displaySeg(num)
+                    else:
+                        byte1 = self.__displaySeg(self.__dispArr[i][0])
 
                     byteArray = bytearray((gridNum, byte1, byte2))
                     self.__writeBuffer.insert(0, byteArray)
 
                     if clearGrid == 1:
-                        clrOldGrid = self.__getGridNum(self.__dispArr[i][2]-1)
+                        clrOldGrid = self.__getGridNum(self.__dispArr[i][1]-1)
                         byteArray = bytearray((prevGrid, 0b00000000, 0b00000000))
                         self.__writeBuffer.insert(0, byteArray)
                         clearGrid = 0
@@ -148,26 +150,31 @@ class DisplayPattern:
                     curRange = i - (self.__trail - 1)
 
                     #Number of the previous and current grids
-                    gridNum = self.__getGridNum(self.__dispArr[i][2])
-                    prevGrid = self.__getGridNum(self.__dispArr[i-self.__trail][2])
+                    gridNum = self.__getGridNum(self.__dispArr[i][1])
+                    prevGrid = self.__getGridNum(self.__dispArr[i-self.__trail][1])
 
                     for j in range(self.__trail):
                         #Byte numbers
-                        currentPosition1 = self.__dispArr[curRange+j][0]
-                        currentPosition2 = self.__dispArr[curRange+j][1]
+                        currentPosition = self.__dispArr[curRange+j][0]
 
-                        curGridNum = self.__getGridNum(self.__dispArr[curRange+j][2])
+                        curGridNum = self.__getGridNum(self.__dispArr[curRange+j][1])
 
                         #Pass the list and the index to be affected.
                         #The first digit in the second byte does not control anything.
                         #Here, 1 is being subtracted so the numbering is more consistent for the end user
                         #e.g. 0 will not light up a segment, but 1 will light up the first
                         if curGridNum == gridNum:
-                            self.__insertInList(allBytes[0], currentPosition1)
-                            self.__insertInList(allBytes[1], currentPosition2-1)
+                            if currentPosition > 8:
+                                num = currentPosition - 8
+                                self.__insertInList(allBytes[1], num)
+                            else:
+                                self.__insertInList(allBytes[0], currentPosition)
                         else:
-                            self.__insertInList(allBytes[2], currentPosition1, 0)
-                            self.__insertInList(allBytes[3], currentPosition2-1)
+                            if currentPosition > 8:
+                                num = currentPosition - 8
+                                self.__insertInList(allBytes[3], num)
+                            else:
+                                self.__insertInList(allBytes[2], currentPosition)
                             
                         #Convert from a list to a byte
                         newGridByte1 = self.__listToByte(allBytes[0])
